@@ -5,7 +5,6 @@ from scipy.sparse import csr_matrix
 from scipy.io import savemat
 from sympy import symbols, diff, lambdify
 import sympy as sy
-import pyvista
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
@@ -15,10 +14,11 @@ from abc import ABC, abstractmethod
 
 import gmsh
 from dolfinx import plot
+from basix.ufl import element
 from dolfinx.io import gmshio
 import dolfinx.mesh as msh
 from mpi4py import MPI
-from dolfinx.fem import Function, FunctionSpace, assemble, form, petsc, Constant
+from dolfinx.fem import Function, functionspace, assemble, form, petsc, Constant, assemble_scalar
 from ufl import (TestFunction, TrialFunction, TrialFunctions,
                  dx, grad, inner, Measure, variable, FacetNormal, SpatialCoordinate)
 import ufl
@@ -106,14 +106,15 @@ class Mesh:
         mesh    = self.mesh
         submesh = self.submesh
     
-        P = FunctionSpace(mesh, (family, deg))
+        P1 = element(family, mesh.basix_cell(), deg)
+        P = functionspace(mesh, P1)
 
 
         if deg != 1:
             # This is linked to the fact on the subdomain, we will deal with the derivate of the function declared in the acoustic domain
             deg = deg - 1
-            
-        Q = FunctionSpace(submesh, (family, deg))
+        Q1 = element(family, submesh.basix_cell(), deg)
+        Q = functionspace(submesh, Q1)
     
         return P, Q
 
@@ -212,7 +213,7 @@ class Simulation:
             Psol1.x.array[:offset] = X.array_r[:offset]
             Qsol1.x.array[:(len(X.array_r) - offset)] = X.array_r[offset:]
         
-            Pav1[ii] = petsc.assemble.assemble_scalar(form(Psol1*ds(1)))
+            Pav1[ii] = assemble_scalar(form(Psol1*ds(1)))
             ksp.destroy()
             X.destroy()
             Z.destroy()
@@ -484,7 +485,7 @@ class Simulation:
             # Qsol1 can provide information in the q unknown which is the normal derivative of the pressure field along the boundary. Qsol1 is not used in this contribution.
         
         
-            Pav1[ii] = petsc.assemble.assemble_scalar(form(Psol1*ds(1)))
+            Pav1[ii] = assemble_scalar(form(Psol1*ds(1)))
             ksp.destroy()
             X.destroy()
             Z.destroy()
@@ -494,7 +495,7 @@ class Simulation:
 
     def compute_radiation_factor(self, freqvec, Pav):
         _, ds, _ = self.mesh.integral_mesure()
-        surfarea = petsc.assemble.assemble_scalar(form(1*ds(1)))
+        surfarea = assemble_scalar(form(1*ds(1)))
         k_output = 2*np.pi*freqvec/c0
         Z_center = 1j*k_output* Pav / surfarea
         return Z_center
@@ -574,9 +575,9 @@ class Operator(ABC):
         pass
 
     def spherical_coordinates(self):
-        mesh = self.mesh.mesh
+        submesh = self.mesh.submesh
         xref    = self.mesh.xref
-        x = SpatialCoordinate(mesh)
+        x = SpatialCoordinate(submesh)
         
         #_, Q = self.mesh.fonction_spaces()
         
@@ -584,32 +585,33 @@ class Operator(ABC):
         #theta = Function(Q)
         #phi   = Function(Q)
         
-        #r.interpolate(lambda x: ufl.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
-        #theta.interpolate(lambda x: ufl.atan(x[1]/x[0]))
-        #phi.interpolate(lambda x: ufl.acos(x[2]/r))
-        r = ufl.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2)
+        #r.interpolate(lambda x: np.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
+        #theta.interpolate(lambda x: np.arctan(x[1]/x[0]))
+        #phi.interpolate(lambda x: np.arccos(x[2]/r(x1)))
+        r     = ufl.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2)
         theta = ufl.atan(x[1]/x[0])
-        phi = ufl.acos(x[2]/r)
+        phi   = ufl.acos(x[2]/r)
 
         return r, theta, phi
 
     def derivative_wrt_theta(self, u):
-        mesh = self.mesh.mesh
+        submesh = self.mesh.submesh
         xref    = self.mesh.xref
-        x       = SpatialCoordinate(mesh)
+        x       = SpatialCoordinate(submesh)
         
         du_dtheta = -x[1]*u.dx(0) + x[0]*u.dx(1)
 
         return du_dtheta
     
     def derivative_wrt_phi(self, u):
-        mesh = self.mesh.mesh
+        submesh = self.mesh.submesh
         xref    = self.mesh.xref
-        x       = SpatialCoordinate(mesh)
+        x       = SpatialCoordinate(submesh)
         
         r, theta, phi = self.spherical_coordinates()
         
         du_dphi = x[2]*ufl.cos(theta)*u.dx(0) + x[2]*ufl.sin(theta)*u.dx(1) + r*ufl.sin(phi)*u.dx(2)
+        #du_dphi.interpolate(lambda x: x[2]*np.cos(theta(x1))*u.dx(0) + x[2]*np.sin(theta(x1))*u.dx(1) + r*np.sin(phi(x1))*u.dx(2))
 
         return du_dphi
 
@@ -621,16 +623,28 @@ class Operator(ABC):
     
         
     def beltrami(self, u):
+        submesh = self.mesh.submesh
+        xref    = self.mesh.xref
+        x       = SpatialCoordinate(submesh)
+        
         _, theta, _= self.spherical_coordinates()
         
         du_dtheta = self.derivative_wrt_theta(u)
         ddu_ddphi = self.derivative_wrt_phi_2(u)
-        
-        #op_beltrami = (1/ufl.sin(theta))*self.derivative_wrt_theta(ufl.sin(theta)*du_dtheta) + (1/(ufl.sin(theta))**2)*ddu_ddphi
-        #op_beltrami = (1/ufl.sin(theta))*self.derivative_wrt_theta(ufl.sin(theta)*du_dtheta)
-        op_beltrami = self.derivative_wrt_theta(ufl.sin(theta))
 
-        return op_beltrami
+        #_, Q = self.mesh.fonction_spaces()
+        #op_beltrami = Function(Q)
+        
+        op_beltrami = (1/ufl.sin(theta))*self.derivative_wrt_theta(ufl.sin(theta)*du_dtheta) + (1/(ufl.sin(theta))**2)*ddu_ddphi
+        
+        #op_beltrami.interpolate(lambda x: (1/np.sin(theta(x1)))*self.derivative_wrt_theta(np.sin(theta(x1))*du_dtheta) + (1/(np.sin(theta(x1)))**2)*ddu_ddphi)
+        #op_beltrami = (1/ufl.sin(theta))*self.derivative_wrt_theta(ufl.sin(theta)*du_dtheta)
+        #op_beltrami = self.derivative_wrt_theta(ufl.sin(theta))
+        
+        print(ufl.sin(theta).dx(0))
+        print(type(ufl.sin(theta).dx(0)))
+        d_sinteta = x[1]**3/(x[0]**4*ufl.sqrt(x[1]**2/x[0]**2 + 1)**3) - x[1]/(x[0]**2*ufl.sqrt(x[1]**2/x[0]**2 + 1))
+        return -x[1]*(x[1]**3*x[0]*u)
 
 
 class B1p(Operator):
@@ -903,7 +917,10 @@ class B2p_beltrami(Operator):
         
         dp  = inner(grad(p), n) # dp/dn = grad(p) * n
         ddp = inner(grad(dp), n) # d^2p/dn^2 = grad(dp/dn) * n = grad(grad(p) * n) * n
+        #op_beltrami_p = Function(Q)
+        #op_beltrami_p.interpolate(lambda x: self.beltrami(p)(x))
         op_beltrami_p = self.beltrami(p)
+        #print(type(p))
 
         
         g1  = inner(fx1**2*op_beltrami_p, u)*ds(3)
@@ -940,10 +957,10 @@ class B2p_beltrami(Operator):
         c_0 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
         c_1 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
         c_2 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
-        c_3 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
-        c_4 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
-        c_5 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
-        c_6 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_3 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
         c_7 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
         c_8 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
         
@@ -1121,6 +1138,7 @@ class Loading:
             list_coeff_F = np.array() : list of the coeffient
         '''
         mesh         = self.mesh.mesh
+        submesh         = self.mesh.submesh
         mesh_tags    = self.mesh.mesh_tags
         mesh_bc_tags = self.mesh.mesh_bc_tags
         xref         = self.mesh.xref
@@ -1133,7 +1151,7 @@ class Loading:
         v, u = TestFunction(P), TestFunction(Q)
         
         f    = inner(source, v) * ds(1)
-        zero = inner(Constant(mesh, PETSc.ScalarType(0)), u) * dx1
+        zero = inner(Constant(submesh, PETSc.ScalarType(0)), u) * dx1
         
         list_F       = np.array([f, zero])
         list_coeff_F = np.array([1, 0])
@@ -1154,9 +1172,10 @@ class Loading:
         list_F = self.list_F
 
         mesh   = self.mesh.mesh
+        submesh   = self.mesh.submesh
         
         c_0 = Constant(mesh, PETSc.ScalarType(list_coeff_F_j[0](freq)))
-        c_1 = Constant(mesh, PETSc.ScalarType(list_coeff_F_j[1](freq)))
+        c_1 = Constant(submesh, PETSc.ScalarType(list_coeff_F_j[1](freq)))
 
         f_0 = c_0*list_F[0]
         f_1 = c_1*list_F[1]

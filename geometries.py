@@ -2,6 +2,7 @@ from mpi4py import MPI
 import gmsh
 from dolfinx.io import gmshio
 import dolfinx.mesh as msh
+import numpy as np
 
 
 

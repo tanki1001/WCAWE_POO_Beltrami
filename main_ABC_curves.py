@@ -76,29 +76,7 @@ else :
     freqvec1 = freqvec
     store_results(s, freqvec, PavFOM1)
 
-from operators_POO import B2p_beltrami
 
-mesh_.set_deg(2)
-
-ope2spe   = B2p_beltrami(mesh_)
-loading   = Loading(mesh_)
-simu2spe  = Simulation(mesh_, ope2spe, loading)
-
-#ope2.import_matrix(freq = 2000)
-from_data_b2pspe = False
-if from_data_b2pspe:
-    s1 = 'FOM_b2pspe'
-    s  = s1 + '_' + geometry
-    freqvec2spe, PavFOM2spe = import_frequency_sweep(s)
-else :
-    freqvec2spe = np.arange(1000,1001,20)
-    PavFOM2spe = simu2spe.FOM(freqvec2spe)
-    s1 = 'FOM_b2pspe'
-    s  = s1 + '_' + geometry
-    store_results(s, freqvec2spe, PavFOM2spe)
-
-
-print(PavFOM2spe)
 
 from operators_POO import B2p
 
@@ -124,8 +102,30 @@ else :
     s  = s1 + '_' + geometry
     store_results(s, freqvec2, PavFOM2)
 
+from operators_POO import B2p_beltrami
 
-print(PavFOM2)
+mesh_.set_deg(2)
+
+ope2spe   = B2p_beltrami(mesh_)
+loading   = Loading(mesh_)
+simu2spe  = Simulation(mesh_, ope2spe, loading)
+
+#ope2.import_matrix(freq = 2000)
+from_data_b2pspe = False
+if from_data_b2pspe:
+    s1 = 'FOM_b2pspe'
+    s  = s1 + '_' + geometry
+    freqvec2spe, PavFOM2spe = import_frequency_sweep(s)
+else :
+    freqvec2spe = np.arange(1000,1001,20)
+    PavFOM2spe = simu2spe.FOM(freqvec2spe)
+    s1 = 'FOM_b2pspe'
+    s  = s1 + '_' + geometry
+    store_results(s, freqvec2spe, PavFOM2spe)
+
+
+print(PavFOM2spe)
+
 
 from operators_POO import B3p
 
