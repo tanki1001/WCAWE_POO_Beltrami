@@ -109,11 +109,8 @@ def cubic_domain(side_box = 0.11, radius = 0.1, lc = 8e-3, model_name = "Cubic")
     # Create the entity maps and an integration measure
     mesh_facet_imap = final_mesh.topology.index_map(fdim)
     mesh_num_facets = mesh_facet_imap.size_local + mesh_facet_imap.num_ghosts
-    print(f"entity_map : {type(entity_map)}")
-    print(f"entity_map.index(2) : {entity_map.index(2)}")
-    entity_maps_mesh = {submesh: [entity_map.index(entity)
-                                    if entity in entity_map else -1
-                                    for entity in range(mesh_num_facets)]}
+    extract = np.array([entity_map.tolist().index(entity) if entity in entity_map else -1 for entity in range(mesh_num_facets)])
+    entity_maps_mesh = {submesh: extract}
 
     
 
@@ -211,9 +208,8 @@ def spherical_domain(side_box = 0.11, radius = 0.1, lc = 6e-3, model_name = "sph
     # Create the entity maps and an integration measure
     mesh_facet_imap = final_mesh.topology.index_map(fdim)
     mesh_num_facets = mesh_facet_imap.size_local + mesh_facet_imap.num_ghosts
-    entity_maps_mesh = {submesh: [entity_map.index(entity)
-                                    if entity in entity_map else -1
-                                    for entity in range(mesh_num_facets)]}
+    extract = np.array([entity_map.tolist().index(entity) if entity in entity_map else -1 for entity in range(mesh_num_facets)])
+    entity_maps_mesh = {submesh: extract}
 
     
 
@@ -325,10 +321,8 @@ def half_cubic_domain(side_box = 0.11, radius = 0.1, lc = 6e-3, model_name = "ha
     # Create the entity maps and an integration measure
     mesh_facet_imap = final_mesh.topology.index_map(fdim)
     mesh_num_facets = mesh_facet_imap.size_local + mesh_facet_imap.num_ghosts
-    entity_maps_mesh = {submesh: [entity_map.index(entity)
-                                    if entity in entity_map else -1
-                                    for entity in range(mesh_num_facets)]}
-
+    extract = np.array([entity_map.tolist().index(entity) if entity in entity_map else -1 for entity in range(mesh_num_facets)])
+    entity_maps_mesh = {submesh: extract}
     
 
     mesh_info = [final_mesh, cell_tags, facet_tags, xref]
@@ -447,9 +441,8 @@ def broken_cubic_domain(side_box = 0.11, radius = 0.1, lc = 6e-3, model_name = "
     # Create the entity maps and an integration measure
     mesh_facet_imap = final_mesh.topology.index_map(fdim)
     mesh_num_facets = mesh_facet_imap.size_local + mesh_facet_imap.num_ghosts
-    entity_maps_mesh = {submesh: [entity_map.index(entity)
-                                    if entity in entity_map else -1
-                                    for entity in range(mesh_num_facets)]}
+    extract = np.array([entity_map.tolist().index(entity) if entity in entity_map else -1 for entity in range(mesh_num_facets)])
+    entity_maps_mesh = {submesh: extract}
 
     
 

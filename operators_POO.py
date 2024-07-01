@@ -701,6 +701,7 @@ class B1p(Operator):
         list_Z = self.list_Z
 
         mesh             = self.mesh.mesh
+        submesh             = self.mesh.submesh
         entity_maps_mesh = self.mesh.entity_maps_mesh
 
         # The following lines save the bug when a coefficient is equal to zero
@@ -709,7 +710,7 @@ class B1p(Operator):
         c_2 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
         c_3 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
         c_4 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
-        c_5 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_5 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
         
         a_00 = c_0*list_Z[0] + c_1*list_Z[1]
         a_01 = c_2*list_Z[2]
