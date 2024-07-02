@@ -17,7 +17,7 @@ geometry  = geometry1 + '_'+ geometry2
 
 if   geometry2 == 'small':
     side_box = 0.11
-    lc       = 8e-3
+    lc       = 6e-3
 elif geometry2 == 'large':
     side_box = 0.40
     lc       = 2e-2
@@ -117,7 +117,7 @@ if from_data_b2pspe:
     s  = s1 + '_' + geometry
     freqvec2spe, PavFOM2spe = import_frequency_sweep(s)
 else :
-    freqvec2spe = np.arange(1000,1001,20)
+    freqvec2spe = np.arange(80,2001,20)
     PavFOM2spe = simu2spe.FOM(freqvec2spe)
     s1 = 'FOM_b2pspe'
     s  = s1 + '_' + geometry
@@ -152,7 +152,7 @@ if comsol_data:
 plot_analytical_result = True
 if plot_analytical_result:
     plot_analytical_result_sigma(ax, freqvec, radius)
-
+plt.savefig("test.png")
 from operators_POO import least_square_err, compute_analytical_radiation_factor
 
 Z_ana = compute_analytical_radiation_factor(freqvec, radius)

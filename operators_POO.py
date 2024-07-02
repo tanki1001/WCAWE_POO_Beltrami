@@ -574,10 +574,10 @@ class Operator(ABC):
     def import_matrix(self, freq):
         pass
 
-    def spherical_coordinates(self):
-        submesh = self.mesh.submesh
+    def spherical_coordinates(self, sub = False):
+        mesh    = self.mesh.mesh
         xref    = self.mesh.xref
-        x = SpatialCoordinate(submesh)
+        x       = SpatialCoordinate(mesh)
         
         #_, Q = self.mesh.fonction_spaces()
         
@@ -588,63 +588,92 @@ class Operator(ABC):
         #r.interpolate(lambda x: np.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
         #theta.interpolate(lambda x: np.arctan(x[1]/x[0]))
         #phi.interpolate(lambda x: np.arccos(x[2]/r(x1)))
+        if sub :
+            submesh    = self.mesh.submesh
+            x       = SpatialCoordinate(submesh)
+            r = ufl.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2)
+            return r
         r     = ufl.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2)
-        theta = ufl.atan(x[1]/x[0])
+        theta = ufl.atan(x[1]/(x[0]+1e-9))
         phi   = ufl.acos(x[2]/r)
 
         return r, theta, phi
 
     def derivative_wrt_theta(self, u):
-        submesh = self.mesh.submesh
+        mesh = self.mesh.mesh
         xref    = self.mesh.xref
-        x       = SpatialCoordinate(submesh)
+        x       = SpatialCoordinate(mesh)
         
         du_dtheta = -x[1]*u.dx(0) + x[0]*u.dx(1)
 
         return du_dtheta
     
     def derivative_wrt_phi(self, u):
-        submesh = self.mesh.submesh
+        mesh = self.mesh.mesh
         xref    = self.mesh.xref
-        x       = SpatialCoordinate(submesh)
+        x       = SpatialCoordinate(mesh)
         
         r, theta, phi = self.spherical_coordinates()
         
-        du_dphi = x[2]*ufl.cos(theta)*u.dx(0) + x[2]*ufl.sin(theta)*u.dx(1) + r*ufl.sin(phi)*u.dx(2)
+        #du_dphi = x[2]*ufl.cos(theta)*u.dx(0) + x[2]*ufl.sin(theta)*u.dx(1) + r*ufl.sin(phi)*u.dx(2)
         #du_dphi.interpolate(lambda x: x[2]*np.cos(theta(x1))*u.dx(0) + x[2]*np.sin(theta(x1))*u.dx(1) + r*np.sin(phi(x1))*u.dx(2))
+        du_dphi = -r*ufl.sin(phi)*u.dx(2)
 
         return du_dphi
 
     def derivative_wrt_phi_2(self, u):
         du_dphi   = self.derivative_wrt_phi(u)
         ddu_ddphi = self.derivative_wrt_phi(du_dphi)
+        #submesh = self.mesh.submesh
+        #xref    = self.mesh.xref
+        #x       = SpatialCoordinate(submesh)
+        
+        #r, theta, phi = self.spherical_coordinates()
+        #ddu_ddphi = x[2]+r*ufl.sin(phi)*u.dx(2).dx(2)
+        mesh = self.mesh.mesh
+        xref    = self.mesh.xref
+        x       = SpatialCoordinate(mesh)
 
-        return ddu_ddphi
+        r, _, phi = self.spherical_coordinates()
+
+        #ddu_ddphi = r*ufl.sin(phi)*(ufl.sin(phi)*(x[2]-xref[2])/(r)*u.dx(2)
+        #            + r*ufl.cos(phi)*(x[2]*(x[2]-xref[2])/(r**3) - 1/(r))*1/(ufl.sqrt(1-(x[2]/(r))**2))*u.dx(2)
+        #            + r*ufl.sin(phi)*u.dx(2).dx(2))
+        dsinphi_dz = (x[2]**2*(x[2]-xref[2]) - x[2]*r**2)/(r**4*ufl.sqrt(1-(x[2]/(r))**2))
+        ddu_ddphi = r*ufl.sin(phi)*(ufl.sin(phi)*(x[2]-xref[2])/(r)*u.dx(2)
+                    + r*dsinphi_dz*u.dx(2)
+                    + r*ufl.sin(phi)*u.dx(2).dx(2))
+
+        
+
+        return 0*ddu_ddphi
     
         
     def beltrami(self, u):
-        submesh = self.mesh.submesh
+        mesh = self.mesh.mesh
         xref    = self.mesh.xref
-        x       = SpatialCoordinate(submesh)
+        x       = SpatialCoordinate(mesh)
         
         _, theta, _= self.spherical_coordinates()
         
         du_dtheta = self.derivative_wrt_theta(u)
         ddu_ddphi = self.derivative_wrt_phi_2(u)
 
-        #_, Q = self.mesh.fonction_spaces()
+        _, Q = self.mesh.fonction_spaces()
         #op_beltrami = Function(Q)
+        #op_beltrami.interpolate(lambda x: np.sqrt(1/(x[0]+1)))
         
-        op_beltrami = (1/ufl.sin(theta))*self.derivative_wrt_theta(ufl.sin(theta)*du_dtheta) + (1/(ufl.sin(theta))**2)*ddu_ddphi
+        op_beltrami = (1/(ufl.sin(theta)))*self.derivative_wrt_theta(ufl.sin(theta)*du_dtheta) + (1/(ufl.sin(theta))**2)*ddu_ddphi
         
         #op_beltrami.interpolate(lambda x: (1/np.sin(theta(x1)))*self.derivative_wrt_theta(np.sin(theta(x1))*du_dtheta) + (1/(np.sin(theta(x1)))**2)*ddu_ddphi)
         #op_beltrami = (1/ufl.sin(theta))*self.derivative_wrt_theta(ufl.sin(theta)*du_dtheta)
         #op_beltrami = self.derivative_wrt_theta(ufl.sin(theta))
         
-        print(ufl.sin(theta).dx(0))
-        print(type(ufl.sin(theta).dx(0)))
-        d_sinteta = x[1]**3/(x[0]**4*ufl.sqrt(x[1]**2/x[0]**2 + 1)**3) - x[1]/(x[0]**2*ufl.sqrt(x[1]**2/x[0]**2 + 1))
-        return -x[1]*(x[1]**3*x[0]*u)
+        #print(ufl.sin(theta).dx(0))
+        #print(type(ufl.sin(theta).dx(0)))
+        #d_sinteta = x[1]**3/(x[0]**4*ufl.sqrt(x[1]**2/x[0]**2 + 1)**3) - x[1]/(x[0]**2*ufl.sqrt(x[1]**2/x[0]**2 + 1))
+        #print(self.derivative_wrt_theta(ufl.sin(theta)*du_dtheta))
+        return op_beltrami
 
 
 class B1p(Operator):
@@ -928,6 +957,11 @@ class B2p_beltrami(Operator):
         g2  = inner(p, u)*ds(3)
         g3  = inner(fx1*p, u)*ds(3)
         g4  = inner(fx1**2*p, u)*ds(3)
+
+        #fx2 = Function(Q)
+        #fx2.interpolate(lambda x: 1/np.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
+        #r2 = self.spherical_coordinates(sub = True)
+        #fx1 = 1/r2
         e1  = inner(fx1*q, u)*dx1
         e2  = inner(q, u)*dx1
     
