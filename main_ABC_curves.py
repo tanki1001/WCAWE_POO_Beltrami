@@ -17,7 +17,7 @@ geometry  = geometry1 + '_'+ geometry2
 
 if   geometry2 == 'small':
     side_box = 0.11
-    lc       = 6e-3
+    lc       = 8e-3
 elif geometry2 == 'large':
     side_box = 0.40
     lc       = 2e-2
@@ -106,37 +106,37 @@ from operators_POO import B2p_beltrami
 
 mesh_.set_deg(2)
 
-ope2spe   = B2p_beltrami(mesh_)
+ope2belt   = B2p_beltrami(mesh_)
 loading   = Loading(mesh_)
-simu2spe  = Simulation(mesh_, ope2spe, loading)
+simu2belt  = Simulation(mesh_, ope2belt, loading)
 
 #ope2.import_matrix(freq = 2000)
-from_data_b2pspe = False
-if from_data_b2pspe:
-    s1 = 'FOM_b2pspe'
+from_data_b2pbelt = False
+if from_data_b2pbelt:
+    s1 = 'FOM_b2pbelt'
     s  = s1 + '_' + geometry
-    freqvec2spe, PavFOM2spe = import_frequency_sweep(s)
+    freqvec2belt, PavFOM2belt = import_frequency_sweep(s)
 else :
-    freqvec2spe = np.arange(80,2001,20)
-    PavFOM2spe = simu2spe.FOM(freqvec2spe)
-    s1 = 'FOM_b2pspe'
+    freqvec2belt = np.arange(80,2001,20)
+    PavFOM2belt = simu2belt.FOM(freqvec2belt)
+    s1 = 'FOM_b2pbelt'
     s  = s1 + '_' + geometry
-    store_results(s, freqvec2spe, PavFOM2spe)
+    store_results(s, freqvec2belt, PavFOM2belt)
 
 
-print(PavFOM2spe)
+#print(PavFOM2belt)
 
 
 from operators_POO import B3p
 
-mesh_.set_deg(2)
+mesh_.set_deg(3)
 
-ope3    = B3p(mesh_)
+ope3belt    = B3p(mesh_)
 loading = Loading(mesh_)
 
-simu3   = Simulation(mesh_, ope3, loading)
-freqvec3 = np.arange(1400, 1401, 20)
-#PavFOM3 = simu3.FOM(freqvec3)
+simu3belt   = Simulation(mesh_, ope3belt, loading)
+freqvec3belt = np.arange(1400, 1401, 20)
+#PavFOM3belt = simu3belt.FOM(freqvec3belt)
 
 
 from operators_POO import plot_analytical_result_sigma
@@ -144,7 +144,8 @@ from operators_POO import plot_analytical_result_sigma
 fig, ax = plt.subplots(figsize=(16,9))
 simu1.plot_radiation_factor(ax, freqvec1, PavFOM1, s = 'FOM_b1p')
 simu2.plot_radiation_factor(ax, freqvec2, PavFOM2,  s = 'FOM_b2p')
-simu2spe.plot_radiation_factor(ax, freqvec2spe, PavFOM2spe,  s = 'FOM_b2pspe')
+simu2belt.plot_radiation_factor(ax, freqvec2belt, PavFOM2belt,  s = 'FOM_b2pbelt')
+#simu3belt.plot_radiation_factor(ax, freqvec3belt, PavFOM3belt,  s = 'FOM_b3pbelt')
 if comsol_data:
     ax.plot(frequency, results, c = 'black', label=r'$\sigma_{COMSOL}$')
     ax.legend()
@@ -163,5 +164,8 @@ print(f'For lc = {lc} - L2_err(B1p) = {err_B1p}')
 err_B2p = least_square_err(freqvec, Z_ana.real, freqvec2, simu2.compute_radiation_factor(freqvec2, PavFOM2).real)
 print(f'For lc = {lc} - L2_err(B2p) = {err_B2p}')
 
-err_B2p_tang = least_square_err(freqvec, Z_ana.real, freqvec2spe, simu2spe.compute_radiation_factor(freqvec2spe, PavFOM2spe).real)
-print(f'For lc = {lc} - L2_err(err_B2p_tang) = {err_B2p_tang}')
+err_B2p_belt = least_square_err(freqvec, Z_ana.real, freqvec2belt, simu2belt.compute_radiation_factor(freqvec2belt, PavFOM2belt).real)
+print(f'For lc = {lc} - L2_err(err_B2p_belt) = {err_B2p_belt}')
+
+#err_B3p_belt = least_square_err(freqvec, Z_ana.real, freqvec3belt, simu3belt.compute_radiation_factor(freqvec3belt, PavFOM3belt).real)
+#print(f'For lc = {lc} - L2_err(err_B3p_belt) = {err_B3p_belt}')

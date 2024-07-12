@@ -109,10 +109,10 @@ class Mesh:
         P1 = element(family, mesh.basix_cell(), deg)
         P = functionspace(mesh, P1)
 
-
-        if deg != 1:
-            # This is linked to the fact on the subdomain, we will deal with the derivate of the function declared in the acoustic domain
-            deg = deg - 1
+        if True:
+            if deg != 1:
+                # This is linked to the fact on the subdomain, we will deal with the derivate of the function declared in the acoustic domain
+                deg = deg - 1
         Q1 = element(family, submesh.basix_cell(), deg)
         Q = functionspace(submesh, Q1)
     
@@ -646,7 +646,7 @@ class Operator(ABC):
 
         
 
-        return 0*ddu_ddphi
+        return ddu_ddphi
     
         
     def beltrami(self, u):
@@ -674,6 +674,43 @@ class Operator(ABC):
         #d_sinteta = x[1]**3/(x[0]**4*ufl.sqrt(x[1]**2/x[0]**2 + 1)**3) - x[1]/(x[0]**2*ufl.sqrt(x[1]**2/x[0]**2 + 1))
         #print(self.derivative_wrt_theta(ufl.sin(theta)*du_dtheta))
         return op_beltrami
+
+    def Dx_theta(self, u, mesh):
+
+        xref    = self.mesh.xref
+        x       = SpatialCoordinate(mesh)
+
+        dx_theta = u.dx(1) + x[0]*u.dx(0).dx(1) - x[1]*u.dx(0).dx(0)
+        return dx_theta
+
+    def Dy_theta(self, u, mesh):
+
+        xref    = self.mesh.xref
+        x       = SpatialCoordinate(mesh)
+
+        dy_theta = -u.dx(0) - x[1]*u.dx(0).dx(1) + x[0]*u.dx(1).dx(1)
+        return dy_theta
+
+    def beltramiV2(self, u, mesh):
+
+        #mesh    = self.mesh.mesh
+        #submesh = self.mesh.submesh
+        xref    = self.mesh.xref
+
+        #mesh    = submesh
+        x       = SpatialCoordinate(mesh)
+
+        r = ufl.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2)
+        dx_theta = self.Dx_theta(u, mesh)
+        dy_theta = self.Dy_theta(u, mesh)
+
+        z_expr = ((x[2] - xref[2])*u.dx(2) + (x[2]**2*(x[2] - xref[2]) - x[2]*r**2)/(r**2*(1 - x[2]**2/r**2))*u.dx(2) + r**2*u.dx(2).dx(2))
+        op_beltrami = x[0]**2/(x[1]+1e-15)*u.dx(1) - x[0]*u.dx(0) + 1/ufl.sqrt(1 + x[1]**2/x[0]**2)*(x[1]*dy_theta - x[1]**2/(x[0]+1e-15)*dx_theta) + (1 + x[0]**2/(x[1]**2+1e-15))*(1 - x[2]**2/(r**2))*z_expr
+        
+
+        return op_beltrami
+        
+
 
 
 class B1p(Operator):
@@ -781,7 +818,6 @@ class B1p(Operator):
         Zsp = csr_matrix((av, aj, ai))
         savemat('Z_'+ope_str+'_ref.mat', {'Z'+ope_str:Zsp})
         
-
 class B2p(Operator):
 
     def __init__(self, mesh):
@@ -921,6 +957,7 @@ class B2p_beltrami(Operator):
     
         '''
         mesh         = self.mesh.mesh
+        submesh      = self.mesh.submesh
         mesh_tags    = self.mesh.mesh_tags
         mesh_bc_tags = self.mesh.mesh_bc_tags
         xref         = self.mesh.xref
@@ -935,10 +972,12 @@ class B2p_beltrami(Operator):
         p, q = TrialFunction(P), TrialFunction(Q)
         v, u = TestFunction(P), TestFunction(Q)
         
-        fx1 = Function(Q)
-        fx1.interpolate(lambda x: 1/np.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
+        #fx1 = Function(Q)
+        #fx1.interpolate(lambda x: 1/np.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
         #r, _, _ = self.spherical_coordinates()
-        #fx1 = 1/r
+        x = SpatialCoordinate(submesh)
+        r = ufl.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2)
+        fx1 = 1/r
         
         k = inner(grad(p), grad(v)) * dx
         m = inner(p, v) * dx
@@ -948,7 +987,8 @@ class B2p_beltrami(Operator):
         ddp = inner(grad(dp), n) # d^2p/dn^2 = grad(dp/dn) * n = grad(grad(p) * n) * n
         #op_beltrami_p = Function(Q)
         #op_beltrami_p.interpolate(lambda x: self.beltrami(p)(x))
-        op_beltrami_p = self.beltrami(p)
+        #op_beltrami_p = self.beltrami(p)
+        op_beltrami_p = self.beltramiV2(p, submesh)
         #print(type(p))
 
         
@@ -991,10 +1031,10 @@ class B2p_beltrami(Operator):
         c_0 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
         c_1 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
         c_2 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
-        c_3 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
-        c_4 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
-        c_5 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
-        c_6 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_3 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
         c_7 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
         c_8 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
         
@@ -1049,6 +1089,7 @@ class B3p(Operator):
     
         '''
         mesh         = self.mesh.mesh
+        submesh      = self.mesh.submesh
         mesh_tags    = self.mesh.mesh_tags
         mesh_bc_tags = self.mesh.mesh_bc_tags
         xref         = self.mesh.xref
@@ -1065,6 +1106,9 @@ class B3p(Operator):
         
         fx1 = Function(Q)
         fx1.interpolate(lambda x: 1/np.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
+        #x = SpatialCoordinate(submesh)
+        #r = ufl.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2)
+        #fx1 = 1/r
         
         k = inner(grad(p), grad(v)) * dx
         m = inner(p, v) * dx
@@ -1073,22 +1117,24 @@ class B3p(Operator):
         dp   = inner(grad(p), n) # dp/dn = grad(p) * n
         ddp  = inner(grad(dp), n) # d^2p/dn^2 = grad(dp/dn) * n = grad(grad(p) * n) * n
         dddp = inner(grad(ddp), n) # d^3p/dn^3 = grad(d^2p/dn^2) * n = grad(grad(dp/dn) * n) * n = grad(grad(grad(p) * n) * n) * n
+        op_beltrami_p = self.beltramiV2(p, submesh)
+
+        g1   = inner(fx1**3*op_beltrami_p, u)*ds(3)
+        g2   = inner(fx1**2*op_beltrami_p, u)*ds(3)
+
+        g3   = inner(fx1**3*p, u)*ds(3)
+        g4   = inner(fx1**2*p, u)*ds(3)
+        g5   = inner(fx1*p, u)*ds(3)
+        g6   = inner(p, u)*ds(3)
         
-        g1   = inner(dddp, u)*ds(3)
-        g2   = inner(ddp, u)*ds(3)
-        g3   = inner(fx1*ddp, u)*ds(3)
-        
-        g4   = inner(fx1**3*p, u)*ds(3)
-        g5   = inner(fx1**2*p, u)*ds(3)
-        g6   = inner(fx1*p, u)*ds(3)
-        g7   = inner(p, u)*ds(3)
-        
+        op_beltrami_q = self.beltramiV2(q, submesh)
+        e0   = inner(fx1**2*op_beltrami_q, u)*dx1
         e1   = inner(fx1**2*q, u)*dx1
         e2   = inner(fx1*q, u)*dx1
         e3   = inner(q, u)*dx1
     
-        list_Z       = np.array([k,      m,  c, g1,    g2, g3, g4,     g5,       g6,        g7, e1,     e2,       e3])
-        list_coeff_Z = np.array([1, -k0**2, -1,  1, 3j*k0,  9,  6, 18j*k0, -9*k0**2, -1j*k0**3, 18, 18j*k0, -3*k0**2])
+        list_Z       = np.array([k,      m,  c,  g1,     g2, g3,      g4,         g5,        g6, e0, e1,     e2,       e3])
+        list_coeff_Z = np.array([1, -k0**2, -1,  -5, -3j*k0,  6,  18j*k0, -16j*k0**2, -4j*k0**3, -1,  6, 12j*k0, -4*k0**2])
         
         return list_Z, list_coeff_Z
 
@@ -1106,22 +1152,23 @@ class B3p(Operator):
         list_Z = self.list_Z
 
         mesh             = self.mesh.mesh
+        submesh          = self.mesh.submesh
         entity_maps_mesh = self.mesh.entity_maps_mesh
 
         # The following lines solve the bug when a coefficient is equal to zero
         c_0  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
         c_1  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
         c_2  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
-        c_3  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
-        c_4  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
-        c_5  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
-        c_6  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
-        c_7  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
-        c_8  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
-        c_9  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[9](freq)))
-        c_10 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[10](freq)))
-        c_11 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[11](freq)))
-        c_12 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[12](freq)))
+        c_3  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_7  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
+        c_8  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
+        c_9  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[9](freq)))
+        c_10 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[10](freq)))
+        c_11 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[11](freq)))
+        c_12 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[12](freq)))
         
         a_00 = c_0*list_Z[0] + c_1*list_Z[1]
         a_01 = c_2*list_Z[2]
