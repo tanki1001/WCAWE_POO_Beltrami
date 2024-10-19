@@ -109,7 +109,7 @@ class Mesh:
         P1 = element(family, mesh.basix_cell(), deg)
         P = functionspace(mesh, P1)
 
-        if True:
+        if False:
             if deg != 1:
                 # This is linked to the fact on the subdomain, we will deal with the derivate of the function declared in the acoustic domain
                 deg = deg - 1
@@ -221,6 +221,169 @@ class Simulation:
             
         return Pav1
 
+    def plot_row_columns_norm(self, freq, s = ''):
+        ope     = self.operator
+
+        list_coeff_Z_j = ope.deriv_coeff_Z(0)
+
+        Z = ope.dZj(freq, list_coeff_Z_j[0])
+
+        list_row_norms    = row_norms(Z)
+        list_column_norms = column_norms(Z)
+
+        fig, (ax_row, ax_col) = plt.subplots(nrows=2, ncols=1, figsize = (16, 9))
+        ax_row.bar(range(len(list_row_norms)), list_row_norms)
+        ax_row.set_ylim([min(list_row_norms), max(list_row_norms)])
+        ax_col.bar(range(len(list_column_norms)), list_column_norms)
+        ax_col.set_ylim([min(list_column_norms), max(list_column_norms)])
+
+        ax_row.set_title('rows')
+        ax_col.set_title('colums')
+        
+        plt.savefig('/root/WCAWE_POO_Beltrami/curves/ABC_curves/rows_col_norm/' +s + f'_row_columns_norm_{freq}.png')
+        print(s + f'_row_columns_norm_{freq}.png has been downloaded')
+  
+    def plot_matrix_heatmap(self, freq, s = ''):
+        
+        ope     = self.operator
+
+        list_coeff_Z_j = ope.deriv_coeff_Z(0)
+
+        Z = ope.dZj(freq, list_coeff_Z_j[0])
+
+        # Obtain the dimensions of the matrix
+        m, n = Z.getSize()
+
+        # Initialise a numpy matrix to store the coefficients
+        matrix_values = np.zeros((m, n), dtype = 'complex')
+
+        # Lists to store indices and non-zero values (real and imaginary parts)
+        rows = []
+        cols = []
+        real_values = []
+        imag_values = []
+
+        # Browse each row of the matrix
+        for i in range(m):
+            
+            row_cols, row_values = Z.getRow(i)
+            rows.extend([i] * len(row_cols))  # Repeat the row index for each non-zero value
+            cols.extend(row_cols)
+            # Extract the real and imaginary parts of the coefficients
+            real_values.extend([val.real for val in row_values])
+            imag_values.extend([val.imag for val in row_values])
+
+        # Create a figure with two sub-graphs
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+
+        # Draw the mapping of the real part
+        scatter1 = ax1.scatter(cols, rows, c=real_values, cmap='viridis', marker='s', s=10)
+        ax1.set_title('Real part Mapping')
+        ax1.set_xlabel('Column index')
+        ax1.set_ylabel('Row index')
+        ax1.invert_yaxis()
+        plt.colorbar(scatter1, ax=ax1, label='Real Part')
+
+        # Draw the mapping of the imaginary part
+        scatter2 = ax2.scatter(cols, rows, c=imag_values, cmap='plasma', marker='s', s=10)
+        ax2.set_title('Imaginary part Mapping')
+        ax2.set_xlabel('Column index')
+        ax2.set_ylabel('Row index')
+        ax2.invert_yaxis()
+        plt.colorbar(scatter2, ax=ax2, label='Imaginary Part')
+
+        # Plot graphs side by side
+        plt.tight_layout()
+        plt.savefig('/root/WCAWE_POO_Beltrami/curves/ABC_curves/heatmap/' +s + f'_colored_matrix_{freq}.png')
+        print(s + f'_colored_matrix_{freq}.png has been downloaded')
+
+    def plot_cond(self, freqvec, s =''):
+        ope = self.operator
+        
+        list_condition_number = []
+        
+        fig, (ax_cn, ax_sv) = plt.subplots(nrows = 1, ncols = 2, figsize = (16, 9))
+
+        for freq in freqvec:
+            list_coeff_Z_j = ope.deriv_coeff_Z(0)
+            Z = ope.dZj(freq, list_coeff_Z_j[0])
+
+            condition_number, list_sigma = get_cond_nb(Z)
+            print(f'list_sigma = {list_sigma}')
+
+            list_condition_number.append(condition_number)
+            ax_sv.scatter([freq for _ in range(len(list_sigma))], list_sigma)
+        
+        
+        ax_cn.plot(freqvec, list_condition_number, label = 'conditioning number')
+        ax_cn.set_xlabel('Frequency')
+        ax_cn.set_ylabel('Conditionning number')
+
+        ax_sv.set_xlabel('Frequency')
+        ax_sv.set_ylabel('sigma')
+
+        ax_cn.legend()
+
+
+        # Plot graphs side by side
+        plt.tight_layout()
+        plt.savefig('/root/WCAWE_POO_Beltrami/curves/ABC_curves/cond_curves/' + s + f'_svd.png')
+        print(s + f'_svd.png has been downloaded')
+    
+    def plot_condV2(self, freq):
+        ope = self.operator
+
+        list_eig_scipy = []
+        list_eig_slepc4py = []
+        
+        
+        list_coeff_Z_j = ope.deriv_coeff_Z(0)
+        Z = ope.dZj(freq, list_coeff_Z_j[0])
+
+        eig_scipy,  eig_slepc4py = get_cond_nbV2(Z)
+        #print(f'condition_number = {condition_number}')
+        fig, ax = plt.subplots()
+        ax.scatter(eig_scipy, eig_scipy, label = 'eig_scipy')
+        ax.scatter(eig_slepc4py, eig_slepc4py, label = 'eig_slepc4py')
+        ax.legend()
+        plt.savefig('testeig.png')
+
+    def plot_sv_listZ(self, s =''):
+        ope              = self.operator
+        entity_maps_mesh = ope.mesh.entity_maps_mesh
+
+        listZ = ope.get_listZ()
+        
+        fig, ax = plt.subplots(layout='constrained',figsize = (16, 9))
+
+        width = 0.05
+
+        index_mat = 1
+
+        for z in listZ:
+            z_form = form(z, entity_maps=entity_maps_mesh)
+
+            Z = petsc.assemble_matrix(z_form)
+            Z.assemble()
+
+            cond_nb, cond_nb_list = get_cond_nb(Z)
+
+            print(f'Conditioning number of the {index_mat}th matrix: {cond_nb}')
+                        
+            for i in range(len(cond_nb_list)):
+                if i == 0:
+                    rects = ax.bar(index_mat - width/2*(len(cond_nb_list) -1 - i*2), cond_nb_list[i], width, label = str(cond_nb))
+                else:
+                    rects = ax.bar(index_mat - width/2*(len(cond_nb_list) -1 - i*2), cond_nb_list[i], width)
+                ax.bar_label(rects, padding=3)
+                
+
+            index_mat += 1
+        ax.set_xticks([i+1 for i in range(len(listZ))])  
+        ax.legend() 
+        plt.savefig('/root/WCAWE_POO_Beltramicurves/ABC_curves/sv_listZ/'+s+'_plot_sv_listZ.png')
+        print(s+'_plot_sv_listZ.png has been downloaded')
+
     def singular_frequency_FOM(self, freq):
         '''
         This function runs a frequency sweep on the simulation to obtain the acoustic pressure along the vibrating surface.
@@ -302,7 +465,7 @@ class Simulation:
         ksp.setOperators(Z_0)
         ksp.setType("gmres")
         ksp.getPC().setType("lu")
-        ksp.getPC().setFactorSolverType("superlu")
+        ksp.getPC().setFactorSolverType("mumps")
         
         ### Create Q matrix
         Q = PETSc.Mat().create()
@@ -347,13 +510,13 @@ class Simulation:
                 F_j.destroy()
                 if j > 1:
                     # The second sum starts only at j = 2
-                    P_q_2        = P_Q_w(Q, n, i, 2)
-                    P_q_2_values = P_q_2.getColumnVector(n-i-1)
+                    P_q_2        = P_Q_w(Q, n, j, 2)
+                    P_q_2_values = P_q_2.getColumnVector(n-j-1)
 
                     Z_j = ope.dZj(freq, d_jZ[j])
                     
                     row_is = PETSc.IS().createStride(Vn.getSize()[0], first=0, step=1)
-                    col_is = PETSc.IS().createStride(n-i, first=0, step=1)
+                    col_is = PETSc.IS().createStride(n-j, first=0, step=1)
                     
                     Vn_i       = Vn.createSubMatrix(row_is, col_is)
                     Vn_i       = Z_j.matMult(Vn_i) # Vn_i = Z_i * Vn_i
@@ -471,7 +634,7 @@ class Simulation:
             ksp.setOperators(Zn)
             ksp.setType("gmres")                       # Solver type 
             ksp.getPC().setType("lu")                  # Preconditionner type
-            ksp.getPC().setFactorSolverType("superlu") # Various type of previous objects are available, and different tests hae to be performed to find the best. Normaly this configuration provides best results
+            ksp.getPC().setFactorSolverType("mumps")   # Various type of previous objects are available, and different tests hae to be performed to find the best. Normaly this configuration provides best results
             
             alpha = Fn.copy()
             ksp.solve(Fn, alpha) # Inversion of the matrix
@@ -501,21 +664,14 @@ class Simulation:
         return Z_center
 
     
-    def plot_radiation_factor(self, ax, freqvec, Pav, s = ''):
-        #_, ds, _ = self.mesh.integral_mesure()
-        #surfarea = petsc.assemble.assemble_scalar(form(1*ds(1)))
-        #k_output = 2*np.pi*freqvec/c0
-        #Z_center = 1j*k_output* Pav / surfarea
-        Z_center = self.compute_radiation_factor(freqvec, Pav)
-        if s == 'FOM_b1p':
-            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b1p}$', c = 'green')
-        elif s == 'FOM_b2p':
-            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b2p}$', c = 'red')
-        elif s == 'WCAWE':
-            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{WCAWE}$', c = 'red')
-            
-        else :
-            ax.plot(freqvec, Z_center.real, label = s)
+    def plot_radiation_factor(self, ax, freqvec, Pav, s = '', compute = True):
+        
+        if compute :
+            Z_center = self.compute_radiation_factor(freqvec, Pav)
+        else:
+            Z_center = Pav
+    
+        ax.plot(freqvec, Z_center.real, label = s)
         ax.grid(True)
         ax.legend(loc='upper left')
         ax.set_xlabel('Frequency (Hz)')
@@ -899,10 +1055,10 @@ class B2p(Operator):
         c_0 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
         c_1 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
         c_2 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
-        c_3 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_3 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
         c_4 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
-        c_5 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
-        c_6 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_5 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
         c_7 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
         c_8 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
         
@@ -1031,10 +1187,10 @@ class B2p_beltrami(Operator):
         c_0 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
         c_1 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
         c_2 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
-        c_3 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
-        c_4 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
-        c_5 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
-        c_6 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_3 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
         c_7 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
         c_8 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
         
@@ -1159,13 +1315,13 @@ class B3p(Operator):
         c_0  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
         c_1  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
         c_2  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
-        c_3  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
-        c_4  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
-        c_5  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
-        c_6  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
-        c_7  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
-        c_8  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
-        c_9  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[9](freq)))
+        c_3  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_7  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
+        c_8  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
+        c_9  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[9](freq)))
         c_10 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[10](freq)))
         c_11 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[11](freq)))
         c_12 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[12](freq)))
@@ -1427,28 +1583,112 @@ def SVD_ortho(Vn):
     return L
 
 def get_cond_nb(Z):
-    n   = Z.getSize()[0]
-    m   = Z.getSize()[1]
-    print(f'n : {n}')
-    
+    # Creating the SVD solver
     svd = SLEPc.SVD().create()
     svd.setOperator(Z)
-    #svd.setFromOptions()
-    svd.setDimensions(m)
-    svd.solve()
-    
-    nsv = svd.getConverged()
-    print(f'svd : {nsv}')
-    Sigma = []
-    for i in range(nsv):
-        
-        u = PETSc.Vec().createSeq(n)
-        v = PETSc.Vec().createSeq(m)
 
-        sigma = svd.getSingularTriplet(i, u, v)
-        Sigma.append(sigma)
-    return max(Sigma)
+    svd.setDimensions(nsv=10)
+    svd.setFromOptions()
+
+    # Solving the singular value decomposition
+    svd.solve()
+
+    # Recovery of extreme singular values
+    list_sigma = []
+    sigma_max = svd.getValue(0)
+    sigma_min = None
+
+    for i in range(svd.getConverged()):
+        sigma = svd.getValue(i)
+        list_sigma.append(sigma)
+        #print(f'sigma :{sigma}')
+        if sigma > 0 and (sigma_min is None or sigma < sigma_min):
+            sigma_min = sigma
+
+    if sigma_min is None or sigma_min == 0:
+        raise RuntimeError("The smallest singular value is zero, the number of conditions is infinite.")
+
+    condition_number = sigma_max / sigma_min
+    #print(f'Conditioning number :{condition_number}')
+    return condition_number, list_sigma
     
+def get_cond_nbV2(Z):
+    t1 = time()
+    Z_fct1 = Z.copy()
+    Z_fct1.convert("seqdense")
+    Z_fct = Z_fct1.getDenseArray()
+    #print(Z_fct)
+
+    S = la.eigvals(Z_fct)
+    t2 = time()
+    print(f"scipy done in {t2-t1}")
+    #condition_number = max(S) / min(S)
+    #S = la.eigvals(Z_fct)
+
+    # Créer un objet EPS pour résoudre le problème aux valeurs propres
+    eps = SLEPc.EPS().create()
+    # Assigner la matrice A au solveur
+    eps.setOperators(Z)
+    # Définir les options (par exemple, calculer 10 valeurs propres)
+    eps.setDimensions(nev=len(S))  # nev : nombre de valeurs propres à calculer
+    # Définir le type de problème aux valeurs propres (standard)
+    #eps.setProblemType(SLEPc.EPS.ProblemType.HEP)  # HEP : Hermitian Eigenvalue Problem
+    # Choisir le solveur (par exemple, Krylov-Schur, par défaut)
+    eps.setFromOptions()
+    # Résoudre le problème
+    eps.solve()
+    
+    # Obtenir le nombre de valeurs propres convergées
+    nconv = eps.getConverged()
+    
+    # Initialiser une liste pour stocker les valeurs propres
+    eigenvalues = []
+    
+    # Récupérer les valeurs propres convergées
+    for i in range(nconv):
+        eigenvalue = eps.getEigenvalue(i)
+        eigenvalues.append(eigenvalue)
+    t3 = time()
+    print(f"SLEPc done in {t3 -t2}")
+    return S, np.array(eigenvalues)
+
+def row_norms(A):
+    
+    # Obtain the dimensions of the matrix
+    m, n = A.getSize()
+
+    # Initialise an array to store row norms
+    list_row_norms = []
+
+    # Calculate the norm of each line
+    for i in range(m):
+        row = A.getRow(i)[1]  # Retrieves non-zero values from the line
+        row_norm = np.linalg.norm(row)
+        list_row_norms.append(row_norm)
+    return list_row_norms
+
+def column_norms(A):
+
+    # Obtain the dimensions of the matrix
+    m, n = A.getSize()
+
+    # Initialise an array to store columns norms
+    list_column_norms = []
+
+    # Calculate the norm of each columns
+    for j in range(n):
+        column_values = np.zeros(m, dtype = 'complex')  # Initialise a complete array the size of the column
+
+        # Browse each row to retrieve the values in column j
+        for i in range(m):
+            column_values[i] = A.getValue(i, j)
+
+        # Calculate the norm of the column
+        column_norm = np.linalg.norm(column_values)
+        list_column_norms.append(column_norm)
+    
+    return list_column_norms
+
 def SVD_ortho2(Vn):
     '''
     This function might be delete further. This function performs an orthogonalization of a basis with a singular value decomposition based on python computation. It converts the PETScMatType to a numpy array, does the computation, and gives back the orthogonalized matrix in the PETScMatType type.
@@ -1480,7 +1720,6 @@ def SVD_ortho2(Vn):
 
     return V_petsc
 
-
 def check_ortho(Vn):
     '''
     This function plot the scalar product between 2 following vector inside a basis, to check if they are orthogonal one to each other.
@@ -1495,14 +1734,146 @@ def check_ortho(Vn):
         vec2 = Vn.getColumnVector(i+1)
         result = vec1.dot(vec2)
         print("vec"+str(i)+" . vec"+str(i+1)+" = "+str(result))
+
+def get_wcawe_param():
+    with open("wcawe_param.txt", 'r') as file:
+        lines = file.readlines()
     
+    sections = ["Dir", "Geometry", "Case", "Operator", "Lc", "DimP", "DimQ"]
+    sections_val = []
+    # Variable pour indiquer si la ligne précédente contient "section"
+    nb_sec = 0
+    previous_line_is_section = False
+
+    # Liste pour stocker les nouvelles lignes
+    updated_lines = []
+    
+    for line in lines:
+        if previous_line_is_section:
+            sections_val.append(line)
+            previous_line_is_section = False
+        else:
+            updated_lines.append(line)
+            if any(section in line for section in sections):
+                previous_line_is_section = True
+                nb_sec +=1
+    
+    dir  = sections_val[0].removesuffix("\n")
+    geo  = sections_val[1].removesuffix("\n")
+    case = sections_val[2].removesuffix("\n")
+    ope  = sections_val[3].removesuffix("\n")
+    lc   = float(sections_val[4])
+    dimP = int(sections_val[5])
+    dimQ = int(sections_val[6])
+    return dir, geo, case, ope, lc, dimP, dimQ
+    
+def parse_wcawe_param():
+    frequencies = []
+    n_values = []
+
+    with open("wcawe_param.txt", 'r') as file:
+        lines = file.readlines()
+
+        freq_section = False
+        n_section = False
+
+        for line in lines:
+
+            if line.startswith('%') or '\n' == line:
+                continue
+
+            if "List frequencies" in line:
+                freq_section = True
+                n_section = False
+                continue
+            elif "List N" in line:
+                freq_section = False
+                n_section = True
+                continue
+
+            if freq_section:
+                frequencies.append(int(line.strip()))
+            elif n_section:
+                n_values.append(int(line.strip()))
+
+    return frequencies, n_values
+
 def store_results(s, freqvec, Pav):
-    with open('FOM_data/'+s+'.txt', 'w') as fichier:    
+    with open('/root/WCAWE_POO_Beltrami/FOM_data/'+s+'.txt', 'w') as fichier:    
         for i in range(len(freqvec)):        
             fichier.write('{}\t{}\n'.format(freqvec[i], Pav[i]))
 
+def store_resultsv2(list_s, freqvec, Pav, simu):
+    z_center = simu.compute_radiation_factor(freqvec, Pav)
+    dict_s = {
+        "geo"  : list_s[0],
+        "case" : list_s[1],
+        "ope"  : list_s[2],
+        "lc"   : list_s[3],
+        "dimP" : list_s[4],
+        "dimQ" : list_s[5]
+    }
+    s = "beltrami_"
+    for key, value in dict_s.items():
+        s+= value
+        if key != "dimQ":
+            s+= "_"
+    s+=".txt"
+    print(s)
+    with open("/root/WCAWE_POO_Beltrami/beltrami/"+s, 'w') as fichier:    
+        for i in range(len(freqvec)):        
+            fichier.write('{}\t{}\n'.format(freqvec[i], z_center[i]))
+
+def store_resultsv3(s, freqvec, Pav, simu):
+    z_center = simu.compute_radiation_factor(freqvec, Pav)
+    with open('/root/WCAWE_POO_Beltrami/FOM_data/'+s+'.txt', 'w') as fichier:    
+        for i in range(len(freqvec)):   
+            fichier.write('{}\t{}\n'.format(freqvec[i], z_center[i]))
+            
+def store_results_wcawe(list_s, freqvec, Pav, simu, file_wcawe_para_list):
+    z_center = simu.compute_radiation_factor(freqvec, Pav)
+    dict_s = {
+        "geo"  : list_s[0],
+        "case" : list_s[1],
+        "ope"  : list_s[2],
+        "lc"   : list_s[3],
+        "dimP" : list_s[4],
+        "dimQ" : list_s[5]
+    }
+    s_dir = ""
+    for key, value in dict_s.items():
+        s_dir+= value
+        if key != "dimQ":
+            s_dir+= "_"
+    print(s_dir)
+    if "modified_r" in list_s[2]:
+        directory_path = "/root/WCAWE_POO_Beltrami/wcawe/beltrami/modified_r/" + s_dir
+    else:
+        directory_path = "/root/WCAWE_POO_Beltrami/wcawe/beltrami/" + s_dir
+    # Create the directory if it doesn't exist
+    os.makedirs(directory_path, exist_ok=True)
+    if file_wcawe_para_list[0]:
+        list_freq, list_N = parse_wcawe_param()
+    else:
+        list_freq, list_N = file_wcawe_para_list[1], file_wcawe_para_list[2]
+    s = ""
+    for freq in list_freq:
+        s+=str(freq)
+        s+="Hz_"
+    for i in range(len(list_N)):
+        s+=str(list_N[i])
+        if i !=len(list_N)-1:
+            s+="_"
+        else:
+            s+=".txt"
+    print(s)
+    file_path = os.path.join(directory_path, s)
+    with open(file_path, 'w') as fichier:    
+        for i in range(len(freqvec)):        
+            fichier.write('{}\t{}\n'.format(freqvec[i], z_center[i]))
+
 def import_frequency_sweep(s):
-    with open('FOM_data/'+s+".txt", "r") as f:
+    with open('/root/WCAWE_POO_Beltrami/FOM_data/'+s+".txt", "r") as f:
         freqvec = list()
         Pav     = list()
         for line in f:
